@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Enrollment Form - JsonPowerDB</title>
+
+    <!-- jQuery for AJAX -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 500px;
+            margin: 40px auto;
+            background: #ffffff;
+            padding: 20px 25px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+        }
+        .btn-row {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #saveBtn { background: #28a745; color: #fff; }
+        #updateBtn { background: #007bff; color: #fff; }
+        #getBtn { background: #17a2b8; color: #fff; }
+        #deleteBtn { background: #dc3545; color: #fff; }
+        #resetBtn { background: #6c757d; color: #fff; }
+        .note {
+            font-size: 12px;
+            margin-top: 8px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Student Enrollment Form</h2>
+
+    <!-- hidden field to store rec_no for UPDATE/DELETE -->
+    <input type="hidden" id="recno">
+
+    <label for="studId">Student Roll No *</label>
+    <input type="text" id="studId" placeholder="Enter roll no">
+
+    <label for="studName">Student Name *</label>
+    <input type="text" id="studName" placeholder="Enter name">
+
+    <label for="studClass">Class / Course *</label>
+    <input type="text" id="studClass" placeholder="e.g. B.Tech CSE">
+
+    <label for="studDob">Date of Birth *</label>
+    <input type="date" id="studDob">
+
+    <label for="studAddress">Address *</label>
+    <textarea id="studAddress" rows="2" placeholder="Enter address"></textarea>
+
+    <label for="studEnroll">Enrollment Date *</label>
+    <input type="date" id="studEnroll">
+
+    <div class="btn-row">
+        <button id="saveBtn"   type="button" onclick="saveStudent()">Save</button>
+        <button id="updateBtn" type="button" onclick="updateStudent()" disabled>Update</button>
+        <button id="getBtn"    type="button" onclick="getStudent()">Get</button>
+        <button id="deleteBtn" type="button" onclick="deleteStudent()" disabled>Delete</button>
+        <button id="resetBtn"  type="button" onclick="resetForm()">Reset</button>
+    </div>
+
+    <div class="note">
+        * Enter Roll No and click <b>Get</b> to check if student exists. <br>
+        * If no record, fill details and click <b>Save</b>. <br>
+        * If record exists, edit details and click <b>Update</b> or <b>Delete</b>.
+    </div>
+</div>
+
+<script>
+    // ---------- JPDB CONFIG ----------
+    var jpdbBaseURL = "http://api.login2explore.com:5577";
+    var jpdbIRL = "/api/irl";
+    var jpdbIML = "/api/iml";
+
+    var connToken = "90934888|-31949257077431659|90959705";
+    var dbName = "Student_db";
+    var relName = "Student_data";
+
+    // ---------- HELPER FUNCTIONS ----------
+
+    function resetForm() {
+        $('#studId').val("").prop("disabled", false);
+        $('#studName').val("");
+        $('#studClass').val("");
+        $('#studDob').val("");
+        $('#studAddress').val("");
+        $('#studEnroll').val("");
+        $('#recno').val("");
+
+        $('#saveBtn').prop("disabled", false);
+        $('#updateBtn').prop("disabled", true);
+        $('#deleteBtn').prop("disabled", true);
+
+        $('#studId').focus();
+    }
+
+    function validateAndGetFormData() {
+        var studId = $('#studId').val().trim();
+        var studName = $('#studName').val().trim();
+        var studClass = $('#studClass').val().trim();
+        var studDob = $('#studDob').val();
+        var studAddress = $('#studAddress').val().trim();
+        var studEnroll = $('#studEnroll').val();
+
+        if (studId === "") { alert("Student Roll No is required"); $('#studId').focus(); return ""; }
+        if (studName === "") { alert("Student Name is required"); $('#studName').focus(); return ""; }
+        if (studClass === "") { alert("Class / Course is required"); $('#studClass').focus(); return ""; }
+        if (studDob === "") { alert("Date of Birth is required"); $('#studDob').focus(); return ""; }
+        if (studAddress === "") { alert("Address is required"); $('#studAddress').focus(); return ""; }
+        if (studEnroll === "") { alert("Enrollment Date is required"); $('#studEnroll').focus(); return ""; }
+
+        var jsonObj = {
+            roll_no: studId,
+            name: studName,
+            class: studClass,
+            dob: studDob,
+            address: studAddress,
+            enrollment_date: studEnroll
+        };
+        return JSON.stringify(jsonObj);
+    }
+
+    function getStudentIdAsJsonObj() {
+        var studId = $('#studId').val().trim();
+        if (studId === "") {
+            alert("Enter Roll No first");
+            $('#studId').focus();
+            return "";
+        }
+        var jsonObj = { roll_no: studId };
+        return JSON.stringify(jsonObj);
+    }
+
+    // ---- JPDB Request Builders ----
+
+    function createPUTRequest(connToken, jsonStr, dbName, relName) {
+        var putRequest = "{\n" +
+            "\"token\" : \"" + connToken + "\"," +
+            "\"dbName\": \"" + dbName + "\",\n" +
+            "\"cmd\" : \"PUT\",\n" +
+            "\"rel\" : \"" + relName + "\"," +
+            "\"jsonStr\": \n" + jsonStr + "\n" +
+            "}";
+        return putRequest;
+    }
+
+    function createUPDATERecordRequest(connToken, jsonStr, dbName, relName, recNo) {
+        var updateRequest = "{\n" +
+            "\"token\" : \"" + connToken + "\"," +
+            "\"dbName\": \"" + dbName + "\",\n" +
+            "\"cmd\" : \"UPDATE\",\n" +
+            "\"rel\" : \"" + relName + "\"," +
+            "\"record\" : " + recNo + ",\n" +
+            "\"jsonStr\": \n" + jsonStr + "\n" +
+            "}";
+        return updateRequest;
+    }
+
+    function createGET_BY_KEYRequest(connToken, dbName, relName, jsonStr) {
+        var getRequest = "{\n" +
+            "\"token\" : \"" + connToken + "\"," +
+            "\"dbName\": \"" + dbName + "\",\n" +
+            "\"cmd\" : \"GET_BY_KEY\",\n" +
+            "\"rel\" : \"" + relName + "\"," +
+            "\"jsonStr\": \n" + jsonStr + "\n" +
+            "}";
+        return getRequest;
+    }
+
+    function createREMOVERecordRequest(connToken, dbName, relName, recNo) {
+        var removeRequest = "{\n" +
+            "\"token\" : \"" + connToken + "\"," +
+            "\"dbName\": \"" + dbName + "\",\n" +
+            "\"cmd\" : \"REMOVE\",\n" +
+            "\"rel\" : \"" + relName + "\"," +
+            "\"record\" : " + recNo + "\n" +
+            "}";
+        return removeRequest;
+    }
+
+    function executeCommand(reqString, apiEndPointUrl) {
+        var url = jpdbBaseURL + apiEndPointUrl;
+        var jsonObj;
+        $.post(url, reqString, function (result) {
+            jsonObj = JSON.parse(result);
+        }).fail(function (result) {
+            var dataJsonObj = result.responseText;
+            jsonObj = JSON.parse(dataJsonObj);
+        });
+        return jsonObj;
+    }
+
+    // ---------- CRUD BUTTON FUNCTIONS ----------
+
+    function saveStudent() {
+        var jsonStr = validateAndGetFormData();
+        if (jsonStr === "") return;
+
+        var putReq = createPUTRequest(connToken, jsonStr, dbName, relName);
+        $.ajaxSetup({ async: false });
+        var resultObj = executeCommand(putReq, jpdbIML);
+        $.ajaxSetup({ async: true });
+
+        alert("Record saved. Response status: " + resultObj.status);
+        resetForm();
+    }
+
+    function getStudent() {
+        var keyJson = getStudentIdAsJsonObj();
+        if (keyJson === "") return;
+
+        var getReq = createGET_BY_KEYRequest(connToken, dbName, relName, keyJson);
+        $.ajaxSetup({ async: false });
+        var resultObj = executeCommand(getReq, jpdbIRL);
+        $.ajaxSetup({ async: true });
+
+        if (resultObj.status !== 200) {
+            alert("Student not found. You can add new record.");
+            $('#studName').val("");
+            $('#studClass').val("");
+            $('#studDob').val("");
+            $('#studAddress').val("");
+            $('#studEnroll').val("");
+            $('#recno').val("");
+            $('#saveBtn').prop("disabled", false);
+            $('#updateBtn').prop("disabled", true);
+            $('#deleteBtn').prop("disabled", true);
+            return;
+        }
+
+        var data = JSON.parse(resultObj.data);
+        var record = data.record;
+
+        $('#recno').val(data.rec_no);
+        $('#studName').val(record.name);
+        $('#studClass').val(record.class);
+        $('#studDob').val(record.dob);
+        $('#studAddress').val(record.address);
+        $('#studEnroll').val(record.enrollment_date);
+
+        $('#studId').prop("disabled", true);
+        $('#saveBtn').prop("disabled", true);
+        $('#updateBtn').prop("disabled", true);   // enabled after change
+        $('#deleteBtn').prop("disabled", false);
+    }
+
+    function updateStudent() {
+        var recNo = $('#recno').val();
+        if (recNo === "") {
+            alert("First fetch the student record using Get button.");
+            return;
+        }
+
+        var jsonStr = validateAndGetFormData();
+        if (jsonStr === "") return;
+
+        var updateReq = createUPDATERecordRequest(connToken, jsonStr, dbName, relName, recNo);
+        $.ajaxSetup({ async: false });
+        var resultObj = executeCommand(updateReq, jpdbIML);
+        $.ajaxSetup({ async: true });
+
+        alert("Record updated. Response status: " + resultObj.status);
+        resetForm();
+    }
+
+    function deleteStudent() {
+        var recNo = $('#recno').val();
+        if (recNo === "") {
+            alert("First fetch the student record using Get button.");
+            return;
+        }
+
+        var removeReq = createREMOVERecordRequest(connToken, dbName, relName, recNo);
+        $.ajaxSetup({ async: false });
+        var resultObj = executeCommand(removeReq, jpdbIML);
+        $.ajaxSetup({ async: true });
+
+        alert("Record deleted. Response status: " + resultObj.status);
+        resetForm();
+    }
+
+    // initial state
+    resetForm();
+</script>
+
+</body>
+</html>
